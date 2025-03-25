@@ -6,51 +6,53 @@ def load_results(filename):
     with open(filename, "rb") as f:
         return pickle.load(f)
 
-results_v100 = load_results("radix_sort_results_v100.pkl")
-results_a100 = load_results("radix_sort_results_a100.pkl")
-results_v100_optimized = load_results("radix_sort_results_v100_optimized.pkl")
+filenames = {
+    "Baseline": "radix_sort_results_v100.pkl",
+    "Opt1 256 Threads": "radix_sort_results_v100_opt1.pkl",
+    "Baseline 512 Threads": "radix_sort_results_v100_baseline_512t.pkl",
+    "Opt1 512 Threads": "radix_sort_results_v100_opt1_512t.pkl",
+    "Opt1 1024 Threads": "radix_sort_results_v100_opt1_1024t.pkl",
+    "Opt2 256 Threads": "radix_sort_results_v100_opt1_try_256t.pkl",
+    "Opt2 1024 Threads": "radix_sort_results_v100_opt1_try_1024t.pkl",
+    "Optimized": "radix_sort_results_v100_optimized_new.pkl"
+}
 
-sizes_v100 = [res["size"] for res in results_v100][1:]
-gpu_times_v100 = [res["gpu_time"] for res in results_v100][1:]
-memory_usages_v100 = [res["memory_usage"] / (1024**2) for res in results_v100][1:]
+results = {key: load_results(file) for key, file in filenames.items()}
 
-sizes_a100 = [res["size"] for res in results_a100][1:]
-gpu_times_a100 = [res["gpu_time"] for res in results_a100][1:]
-memory_usages_a100 = [res["memory_usage"] / (1024**2) for res in results_a100][1:]
-
-sizes_v100_optimized = [res["size"] for res in results_v100_optimized][1:]
-gpu_times_v100_optimized = [res["gpu_time"] / 1000 for res in results_v100_optimized][1:]
-memory_usages_v100_optimized = [res["memory_usage"] / (1024**2) for res in results_v100_optimized][1:]
+sizes, gpu_times, memory_usages = {}, {}, {}
+for key, res in results.items():
+    sizes[key] = [r["size"] for r in res][1:]
+    gpu_times[key] = [r["gpu_time"] / (1000 if "Optimized" in key else 1) for r in res][1:]
+    memory_usages[key] = [r["memory_usage"] / (1024**2) for r in res][1:]
 
 fig, axes = plt.subplots(2, 1, figsize=(10, 10))
+styles = {
+    "Baseline": ("s", "--", "tab:blue"),
+    "Baseline 512 Threads": (">", "-", "tab:brown"),
+    "Opt1 256 Threads": ("o", "-", "tab:cyan"),
+    "Opt1 512 Threads": ("<", "-", "tab:purple"),
+    "Opt1 1024 Threads": ("v", "-", "tab:gray"),
+    "Opt2 256 Threads": ("H", "-", "tab:olive"),
+    "Opt2 1024 Threads": ("*", "-", "tab:orange"),
+    "Optimized": ("^", ":", "tab:red")
+}
 
-axes[0].plot(sizes_v100, gpu_times_v100, label="V100 GPU Time", marker="s", linestyle="--", color="tab:blue")
-axes[0].plot(sizes_a100, gpu_times_a100, label="A100 GPU Time", marker="o", linestyle="-", color="tab:cyan")
-axes[0].plot(sizes_v100_optimized, gpu_times_v100_optimized, label="V100 Optimized GPU Time", marker="^", linestyle=":", color="tab:red")
-axes[0].set_xlabel("Array Size")
-axes[0].set_ylabel("Time (seconds)")
-axes[0].set_xscale("log")
-axes[0].set_yscale("log")
-axes[0].xaxis.set_major_formatter(ticker.ScalarFormatter())
-axes[0].set_xticks(sizes_v100)
-axes[0].set_xticklabels([f"{s:.1e}" for s in sizes_v100], rotation=45)
-axes[0].legend()
-axes[0].set_title("GPU Execution Time for Radix Sort")
-axes[0].grid(True)
+for key, (marker, linestyle, color) in styles.items():
+    axes[0].plot(sizes[key], gpu_times[key], label=f"{key} GPU Time", marker=marker, linestyle=linestyle, color=color)
+    axes[1].plot(sizes[key], memory_usages[key], label=f"{key} Memory Usage (MB)", marker=marker, linestyle=linestyle, color=color)
 
-axes[1].plot(sizes_v100, memory_usages_v100, label="V100 Memory Usage (MB)", marker="d", linestyle="--", color="tab:green")
-axes[1].plot(sizes_a100, memory_usages_a100, label="A100 Memory Usage (MB)", marker="p", linestyle="-", color="tab:olive")
-axes[1].plot(sizes_v100_optimized, memory_usages_v100_optimized, label="V100 Optimized Memory Usage (MB)", marker="h", linestyle=":", color="tab:orange")
-axes[1].set_xlabel("Array Size")
-axes[1].set_ylabel("Memory Usage (MB)")
-axes[1].set_xscale("log")
 axes[0].set_yscale("log")
-axes[1].xaxis.set_major_formatter(ticker.ScalarFormatter())
-axes[1].set_xticks(sizes_v100)
-axes[1].set_xticklabels([f"{s:.1e}" for s in sizes_v100], rotation=45)
-axes[1].legend()
-axes[1].set_title("Memory Usage for Radix Sort")
-axes[1].grid(True)
+
+for ax, ylabel, title in zip(axes, ["Time (seconds)", "Memory Usage (MB)"],
+                             ["GPU Execution Time for Radix Sort", "Memory Usage for Radix Sort"]):
+    ax.set_xlabel("Array Size")
+    ax.set_ylabel(ylabel)
+    ax.set_xscale("log")
+    ax.xaxis.set_major_locator(ticker.FixedLocator(sizes["Baseline"]))
+    ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x)}"))
+    ax.legend()
+    ax.set_title(title)
+    ax.grid(True)
 
 plt.tight_layout()
 plt.show()
