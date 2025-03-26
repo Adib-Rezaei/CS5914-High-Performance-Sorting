@@ -3,69 +3,64 @@ import numba
 from numba import cuda
 import time
 import pickle
-import math
 
 from numba import config
 config.CUDA_ENABLE_PYNVJITLINK = 1
 
 @cuda.jit
-def counting_sort_kernel(d_arr, d_output, exp):
-    shared_count = cuda.shared.array(10, numba.int32)
+def counting_sort_kernel(arr, output, count, exp, size):
+    shared_count = cuda.shared.array(10, dtype=numba.int32)
 
-    tid = cuda.grid(1)
-    lane = cuda.threadIdx.x
+    tid = cuda.threadIdx.x + cuda.blockIdx.x * cuda.blockDim.x
+    tx = cuda.threadIdx.x
 
-    if lane < 10:
-        shared_count[lane] = 0
+    if tx < 10:
+        shared_count[tx] = 0
     cuda.syncthreads()
 
-    if tid < d_arr.size:
-        digit = (d_arr[tid] // exp) % 10
-        cuda.atomic.add(shared_count, digit, 1)
+    if tid < size:
+        index = (arr[tid] // exp) % 10
+        cuda.atomic.add(shared_count, index, 1)
     cuda.syncthreads()
 
-    if lane == 0:
+    # Parallel scan (prefix sum)
+    if tx == 0:
         for i in range(1, 10):
             shared_count[i] += shared_count[i - 1]
     cuda.syncthreads()
 
-    if tid < d_arr.size:
-        digit = (d_arr[tid] // exp) % 10
-        pos = cuda.atomic.sub(shared_count, digit, 1) - 1
-        d_output[pos] = d_arr[tid]
+    if tid < size:
+        index = (arr[tid] // exp) % 10
+        pos = cuda.atomic.sub(shared_count, index, 1) - 1
+        output[pos] = arr[tid]
+    cuda.syncthreads()
+
 
 def radix_sort_gpu(arr):
-    n = arr.size
+    size = arr.size
     d_arr = cuda.to_device(arr)
     d_output = cuda.device_array_like(arr)
+    max_num = arr.max()
+    threads_per_block = 256
+    blocks_per_grid = (size + threads_per_block - 1) // threads_per_block
 
-    max_element = np.max(arr)
+    start = time.time()
     exp = 1
-
-    start_event = cuda.event()
-    end_event = cuda.event()
-    start_event.record()
-
-    threads_per_block = 1024
-    blocks_per_grid = math.ceil(n / threads_per_block)
-
-    while max_element // exp > 0:
-        counting_sort_kernel[blocks_per_grid, threads_per_block](d_arr, d_output, exp)
-        d_arr, d_output = d_output, d_arr  # Swap references
+    while max_num // exp > 0:
+        d_count = cuda.device_array(10, dtype=np.int32)
+        counting_sort_kernel[blocks_per_grid, threads_per_block](d_arr, d_output, d_count, exp, size)
+        d_arr.copy_to_device(d_output)
         exp *= 10
-
-    end_event.record()
-    end_event.synchronize()
-    gpu_time = cuda.event_elapsed_time(start_event, end_event) / 1000.0
+    cuda.synchronize()
+    end = time.time()
 
     sorted_arr = d_arr.copy_to_host()
-    return sorted_arr, gpu_time
+    return sorted_arr, end - start
 
 results = []
 sizes = [2**i * 10**6 for i in range(10)]
 for size in sizes:
     arr = np.random.randint(0, 10000, size, dtype=np.int32)
-
     sorted_gpu, gpu_time = radix_sort_gpu(arr.copy())
     
     flops = (size * np.log10(size)) / gpu_time
@@ -85,4 +80,3 @@ for size in sizes:
 
 with open("radix_sort_results.pkl", "wb") as f:
     pickle.dump(results, f)
-

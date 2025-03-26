@@ -5,6 +5,9 @@ import time
 import sys
 import pickle
 
+from numba import config
+config.CUDA_ENABLE_PYNVJITLINK = 1
+
 @cuda.jit
 def counting_sort_kernel(d_arr, d_output, exp, d_count):
     shared_count = cuda.shared.array(10, numba.int32)

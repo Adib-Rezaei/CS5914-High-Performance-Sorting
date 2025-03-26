@@ -56,8 +56,12 @@ for size in sizes:
     cpu_time = end_time - start_time
     approx_flops = size * np.log10(max(arr)) if len(arr) > 0 else 0  # Approximate FLOPS calculation
     memory_usage = get_memory_usage()
-    
-    print(f"Sorted array size: {size}, CPU Time: {cpu_time:.4f} sec, Approx FLOPS: {approx_flops:.2f}, Memory Usage: {memory_usage:.2f} MB")
+
+    print(f"Array size: {size}")
+    # print(f"CPU Time: {cpu_time:.6f} sec")
+    print(f"GPU Time: {cpu_time:.6f} sec")
+    print(f"Approx FLOPS: {approx_flops:.2f}")
+    print(f"Memory Usage: {memory_usage / (1024**2):.2f} MB\n")    
 
     results.append({
         "size": int(size),
